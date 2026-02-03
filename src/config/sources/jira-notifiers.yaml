@@ -1,0 +1,33 @@
+# Jira Notifiers - Source Definition
+# Holt Notifier-Konfigurationen aus der CMDB und mappt sie ins ACS-Format
+
+name: "jira-notifiers"
+enabled: true
+
+# --- Connection ---
+connection:
+  host: "https://cmdb.example.com"
+  auth_type: "bearer"             # bearer | basic | apikey
+  token_env: "CMDB_TOKEN"         # Umgebungsvariable mit dem Token
+  endpoint: "/api/v1/notifiers"
+
+# --- Output ---
+target_key: "notifiers"           # Key in der output inputs.yaml
+
+# --- Mapping ---
+# API-Feldname -> Output-Feldname (Whitelist: nur gemappte Felder landen im Output)
+mapping:
+  title: "name"
+  notification_type: "type"
+  ui_endpoint: "uiEndpoint"
+  label_key: "labelKey"
+  label_default: "labelDefault"
+  config: "jira"
+
+# --- Defaults ---
+# Statische Werte die jedem Item hinzugefuegt werden
+defaults:
+  traits:
+    mutabilityMode: "ALLOW_MUTATE"
+    visibility: "VISIBLE"
+    origin: "IMPERATIVE"
