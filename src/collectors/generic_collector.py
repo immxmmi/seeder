@@ -56,7 +56,7 @@ class GenericCollector(BaseCollector):
         )
 
         if self.source.mapping_fields or self.source.defaults:
-            data = [self._transform(item) for item in data]
+            data = [self._transform(self._preprocess(item)) for item in data]
             log.debug("GenericCollector", f"Applied mapping/defaults to {len(data)} items")
 
         return data
@@ -79,6 +79,39 @@ class GenericCollector(BaseCollector):
                 result[key] = value
 
         return result
+
+    def _preprocess(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.source.options:
+            return item
+
+        if self.source.options.get("flatten_preferred_version") is True:
+            return self._flatten_preferred_version(item)
+
+        return item
+
+    @staticmethod
+    def _flatten_preferred_version(item: Dict[str, Any]) -> Dict[str, Any]:
+        preferred = item.get("preferred")
+        versions = item.get("versions", {})
+        if not preferred or not isinstance(versions, dict):
+            return item
+
+        preferred_entry = versions.get(preferred)
+        if not isinstance(preferred_entry, dict):
+            return item
+
+        info = preferred_entry.get("info", {})
+        out = dict(item)
+        out["preferred_info"] = info
+        out["preferred_spec"] = {
+            "swaggerUrl": preferred_entry.get("swaggerUrl"),
+            "swaggerYamlUrl": preferred_entry.get("swaggerYamlUrl"),
+            "openapiVer": preferred_entry.get("openapiVer"),
+            "link": preferred_entry.get("link"),
+            "updated": preferred_entry.get("updated"),
+            "added": preferred_entry.get("added"),
+        }
+        return out
 
     @staticmethod
     def _get_path(item: Dict[str, Any], path: str):

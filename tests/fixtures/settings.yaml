@@ -1,0 +1,43 @@
+output:
+  file: "./inputs.yaml"
+
+debug:
+  enabled: false
+
+app:
+  version: "1.0.0"
+
+connectors:
+  - name: "apis-guru"
+    enabled: true
+    connection:
+      host: "https://api.apis.guru"
+      auth_type: "none"
+      endpoint: "/v2/list.json"
+
+    options:
+      flatten_preferred_version: true
+
+    mapping:
+      replace_object: "apis"
+      fields:
+        - from: "api_id"
+          to: "id"
+        - from: "preferred"
+          to: "preferred"
+        - from: "preferred_info.title"
+          to: "title"
+        - from: "preferred_info.version"
+          to: "version"
+        - from: "preferred_info.contact.email"
+          to: "contact_email"
+        - from: "preferred_info.x-providerName"
+          to: "provider"
+        - from: "preferred_info.x-apisguru-categories"
+          to: "categories"
+        - from: "preferred_spec.swaggerUrl"
+          to: "swaggerUrl"
+        - from: "preferred_spec.openapiVer"
+          to: "openapiVer"
+        - from: "preferred_spec.link"
+          to: "link"

@@ -24,6 +24,7 @@ class ConnectorConfig:
         raw_mapping = data.get("mapping", {})
         self.mapping_replace_object: Optional[str] = None
         self.mapping_fields: List[Dict[str, str]] = self._parse_mapping(raw_mapping)
+        self.options: Dict[str, Any] = data.get("options", {})
 
         if not self.target_key and self.mapping_replace_object:
             self.target_key = self.mapping_replace_object

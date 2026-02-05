@@ -12,46 +12,42 @@ import gateway.client as client_mod
 
 
 def test_seeder_writes_inputs_yaml(tmp_path, monkeypatch):
-    settings = {
-        "output": {"file": str(tmp_path / "inputs.yaml")},
-        "debug": {"enabled": False},
-        "app": {"version": "1.0.0"},
-        "connectors": [
-            {
-                "name": "test-notifiers",
-                "enabled": True,
-                "connection": {
-                    "host": "https://example.com",
-                    "auth_type": "none",
-                    "endpoint": "/api/notifiers",
-                },
-                "mapping": {
-                    "replace_object": "notifiers",
-                    "fields": [
-                        {"from": "title", "to": "name"},
-                        {"from": "notification_type", "to": "type"},
-                    ],
-                },
-            }
-        ],
-    }
-
-    cfg_path = tmp_path / "settings.yaml"
-    cfg_path.write_text(yaml.safe_dump(settings, sort_keys=False))
-
-    monkeypatch.setenv("SEEDER_CONFIG_FILE", str(cfg_path))
-    monkeypatch.setenv("OUTPUT_FILE", str(tmp_path / "inputs.yaml"))
+    out_path_env = os.getenv("E2E_OUTPUT_FILE")
+    out_path = os.path.abspath(out_path_env) if out_path_env else str(tmp_path / "inputs.yaml")
+    cfg_path = os.path.join(os.path.dirname(__file__), "fixtures", "settings.yaml")
+    monkeypatch.setenv("SEEDER_CONFIG_FILE", cfg_path)
+    monkeypatch.setenv("OUTPUT_FILE", out_path)
 
     def fake_get(self, endpoint, **kwargs):
-        return [{"title": "Jira-Sec", "notification_type": "jira"}]
+        return {
+            "1forge.com": {
+                "preferred": "0.0.1",
+                "versions": {
+                    "0.0.1": {
+                        "info": {
+                            "contact": {"email": "contact@1forge.com"},
+                            "title": "1Forge Finance APIs",
+                            "version": "0.0.1",
+                            "x-apisguru-categories": ["financial"],
+                            "x-providerName": "1forge.com",
+                        },
+                        "swaggerUrl": "https://api.apis.guru/v2/specs/1forge.com/0.0.1/swagger.json",
+                        "openapiVer": "2.0",
+                        "link": "https://api.apis.guru/v2/specs/1forge.com/0.0.1.json",
+                    }
+                },
+            },
+        }
 
     monkeypatch.setattr(client_mod.ApiClient, "get", fake_get)
 
     Config.reset()
     main()
 
-    out_path = tmp_path / "inputs.yaml"
-    assert out_path.exists()
-    content = yaml.safe_load(out_path.read_text())
-    assert "notifiers" in content
-    assert content["notifiers"][0]["name"] == "Jira-Sec"
+    assert os.path.exists(out_path)
+    content = yaml.safe_load(open(out_path, "r").read())
+    assert "apis" in content
+    assert content["apis"][0]["id"] == "1forge.com"
+    assert content["apis"][0]["preferred"] == "0.0.1"
+    assert content["apis"][0]["title"] == "1Forge Finance APIs"
+    assert content["apis"][0]["contact_email"] == "contact@1forge.com"

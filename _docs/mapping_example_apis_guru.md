@@ -54,3 +54,8 @@ If you want specific nested values (e.g. preferred version info), use dot-paths:
 
 Note: To use `preferred_info.*` fields, you need a pre-step that flattens `versions[preferred].info` into
 `preferred_info`.
+Enable flattening in the connector:
+```yaml
+    options:
+      flatten_preferred_version: true
+```
