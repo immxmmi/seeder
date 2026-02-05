@@ -11,7 +11,9 @@ from collectors.generic_collector import GenericCollector
 
 def _make_collector(mapping=None, defaults=None):
     """Helper: Erstellt einen GenericCollector ohne echten API-Client."""
-    if isinstance(mapping, dict):
+    if mapping is None:
+        mapping = {}
+    if isinstance(mapping, dict) and mapping:
         if "fields" not in mapping:
             mapping = {"fields": [{"from": k, "to": v} for k, v in mapping.items()]}
         if "replace_object" not in mapping:
