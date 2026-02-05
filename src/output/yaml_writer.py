@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 import yaml
-
 from utils.logger import Logger as log
 
 
@@ -17,7 +16,6 @@ class YamlWriter:
 
         try:
             content = output_path.read_text()
-            # Strip comment header before parsing
             data = yaml.safe_load(content)
             return data if data else None
         except yaml.YAMLError as e:
@@ -48,7 +46,6 @@ class YamlWriter:
                 changes.append(f"  - [{key}] section removed ({len(old_items)} item(s))")
                 continue
 
-            # Compare by name if available, otherwise by index
             old_by_name = {item.get("name", f"__idx_{i}"): item for i, item in enumerate(old_items)}
             new_by_name = {item.get("name", f"__idx_{i}"): item for i, item in enumerate(new_items)}
 
@@ -60,7 +57,6 @@ class YamlWriter:
                 elif name not in new_by_name:
                     changes.append(f"  - [{key}] removed: {name}")
                 elif old_by_name[name] != new_by_name[name]:
-                    # Find which fields changed
                     old_item = old_by_name[name]
                     new_item = new_by_name[name]
                     changed_fields = []
@@ -80,7 +76,6 @@ class YamlWriter:
             output_path: Path to the output YAML file.
             data: Dictionary with target_keys as keys and lists of dicts as values.
         """
-        # Check diff against existing file
         existing = YamlWriter.load_existing(output_path)
 
         if existing is not None:
@@ -95,7 +90,6 @@ class YamlWriter:
         else:
             log.info("YamlWriter", f"Creating new file: {output_path}")
 
-        # Write output
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         total_items = sum(len(v) for v in data.values())

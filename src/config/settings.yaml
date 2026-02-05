@@ -1,6 +1,3 @@
-# Seeder - Global Settings
-# Source-Definitionen liegen in config/sources/*.yaml
-
 output:
   file: "../acs-provisioner/src/pipelines/inputs.yaml"
 
@@ -9,3 +6,5 @@ debug:
 
 app:
   version: "1.0.0"
+
+connectors: [ ]

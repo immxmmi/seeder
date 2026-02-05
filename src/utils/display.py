@@ -33,8 +33,8 @@ BANNER = r"""
 
 
 @dataclass
-class SourceResult:
-    """Result of a single source collection."""
+class ConnectorResult:
+    """Result of a single connector collection."""
     name: str
     target_key: str
     items_collected: int
@@ -45,22 +45,22 @@ class SourceResult:
 @dataclass
 class SeederStats:
     """Statistics for a seeder run."""
-    total_sources: int = 0
-    successful_sources: int = 0
-    failed_sources: int = 0
-    skipped_sources: int = 0
+    total_connectors: int = 0
+    successful_connectors: int = 0
+    failed_connectors: int = 0
+    skipped_connectors: int = 0
     total_items: int = 0
     output_updated: bool = False
     changes: List[str] = field(default_factory=list)
-    results: List[SourceResult] = field(default_factory=list)
+    results: List[ConnectorResult] = field(default_factory=list)
 
-    def add_result(self, result: SourceResult):
+    def add_result(self, result: ConnectorResult):
         self.results.append(result)
         if result.success:
-            self.successful_sources += 1
+            self.successful_connectors += 1
             self.total_items += result.items_collected
         else:
-            self.failed_sources += 1
+            self.failed_connectors += 1
 
 
 class Display:
@@ -76,12 +76,12 @@ class Display:
         print()
 
     @staticmethod
-    def sources_overview(sources, debug: bool = False):
-        """Show loaded source definitions."""
+    def connectors_overview(sources, debug: bool = False):
+        """Show loaded connector definitions."""
         enabled = [s for s in sources if s.enabled]
         disabled = [s for s in sources if not s.enabled]
 
-        print(f"  {Colors.MAGENTA}{Colors.BOLD}Sources{Colors.RESET}")
+        print(f"  {Colors.MAGENTA}{Colors.BOLD}Connectors{Colors.RESET}")
         print(f"  {Colors.DIM}{'─' * 40}{Colors.RESET}")
 
         for s in sources:
@@ -97,13 +97,17 @@ class Display:
             print(f"      {Colors.DIM}Endpoint:{Colors.RESET} {s.endpoint}")
             print(f"      {Colors.DIM}Target:{Colors.RESET}   {s.target_key}")
 
-            if debug and s.mapping:
-                print(f"      {Colors.DIM}Mapping:{Colors.RESET}  {len(s.mapping)} field(s)")
-                for api_f, out_f in s.mapping.items():
+            if debug and s.mapping_fields:
+                print(f"      {Colors.DIM}Mapping:{Colors.RESET}  {len(s.mapping_fields)} field(s)")
+                if s.mapping_replace_object:
+                    print(f"      {Colors.DIM}Replace:{Colors.RESET}  {s.mapping_replace_object}")
+                for m in s.mapping_fields:
+                    api_f = m.get("from", "")
+                    out_f = m.get("to", "")
                     print(f"        {Colors.DIM}{api_f} -> {out_f}{Colors.RESET}")
 
             if debug and s.defaults:
-                print(f"      {Colors.DIM}Defaults:{Colors.RESET} {len(s.defaults)} key(s)")
+                print(f"      {Colors.DIM}Defaults:{Colors.RESET} {list(s.defaults.keys())}")
 
             print()
 
@@ -152,9 +156,9 @@ class Display:
         print(f"{Colors.DIM}{'─' * 50}{Colors.RESET}")
         print()
 
-        if stats.failed_sources == 0 and stats.total_items > 0:
+        if stats.failed_connectors == 0 and stats.total_items > 0:
             header = f"{Colors.BG_GREEN}{Colors.BLACK}{Colors.BOLD} SEEDER SUCCESSFUL {Colors.RESET}"
-        elif stats.failed_sources > 0:
+        elif stats.failed_connectors > 0:
             header = f"{Colors.BG_RED}{Colors.WHITE}{Colors.BOLD} SEEDER FAILED {Colors.RESET}"
         else:
             header = f"{Colors.BG_YELLOW}{Colors.BLACK}{Colors.BOLD} SEEDER NO DATA {Colors.RESET}"
@@ -162,12 +166,12 @@ class Display:
         print(f"  {header}")
         print()
         print(f"  {Colors.BOLD}Summary:{Colors.RESET}")
-        print(f"    Sources:     {stats.total_sources}")
-        print(f"    {Colors.GREEN}Successful:{Colors.RESET}  {stats.successful_sources}")
-        if stats.failed_sources > 0:
-            print(f"    {Colors.RED}Failed:{Colors.RESET}      {stats.failed_sources}")
-        if stats.skipped_sources > 0:
-            print(f"    {Colors.YELLOW}Skipped:{Colors.RESET}     {stats.skipped_sources}")
+        print(f"    Connectors:  {stats.total_connectors}")
+        print(f"    {Colors.GREEN}Successful:{Colors.RESET}  {stats.successful_connectors}")
+        if stats.failed_connectors > 0:
+            print(f"    {Colors.RED}Failed:{Colors.RESET}      {stats.failed_connectors}")
+        if stats.skipped_connectors > 0:
+            print(f"    {Colors.YELLOW}Skipped:{Colors.RESET}     {stats.skipped_connectors}")
         print(f"    Items:       {stats.total_items}")
 
         if stats.output_updated:
@@ -178,10 +182,9 @@ class Display:
         print(f"    {Colors.BOLD}Duration:{Colors.RESET}    {duration:.2f}s")
         print()
 
-        # Show failed sources
         failed = [r for r in stats.results if not r.success]
         if failed:
-            print(f"  {Colors.RED}{Colors.BOLD}Failed Sources:{Colors.RESET}")
+            print(f"  {Colors.RED}{Colors.BOLD}Failed Connectors:{Colors.RESET}")
             for r in failed:
                 print(f"    - {r.name}: {r.message or 'Unknown error'}")
             print()

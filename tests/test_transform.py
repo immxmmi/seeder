@@ -1,22 +1,27 @@
 """Tests fuer das Mapping/Transform im GenericCollector."""
 
-import sys
 import os
-import pytest
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from config.loader import SourceConfig
+from config.loader import ConnectorConfig
 from collectors.generic_collector import GenericCollector
 
 
 def _make_collector(mapping=None, defaults=None):
     """Helper: Erstellt einen GenericCollector ohne echten API-Client."""
-    source = SourceConfig({
+    if isinstance(mapping, dict):
+        if "fields" not in mapping:
+            mapping = {"fields": [{"from": k, "to": v} for k, v in mapping.items()]}
+        if "replace_object" not in mapping:
+            mapping["replace_object"] = "items"
+    source = ConnectorConfig({
         "name": "test-source",
         "target_key": "items",
         "connection": {
             "host": "https://example.com",
+            "auth_type": "none",
             "endpoint": "/api/test",
         },
         "mapping": mapping or {},
@@ -55,6 +60,28 @@ class TestMappingBasic:
         c = _make_collector(mapping={})
         result = c._transform({"title": "Jira-Sec", "kind": "jira", "extra": 42})
         assert result == {"title": "Jira-Sec", "kind": "jira", "extra": 42}
+
+    def test_mapping_as_field_list(self):
+        mapping = {
+            "fields": [
+                {"from": "title", "to": "name"},
+                {"from": "kind", "to": "type"},
+            ]
+        }
+        c = _make_collector(mapping=mapping)
+        result = c._transform({"title": "Jira-Sec", "kind": "jira"})
+        assert result == {"name": "Jira-Sec", "type": "jira"}
+
+    def test_dot_path_mapping(self):
+        mapping = {
+            "fields": [
+                {"from": "info.title", "to": "title"},
+                {"from": "info.version", "to": "version"},
+            ]
+        }
+        c = _make_collector(mapping=mapping)
+        result = c._transform({"info": {"title": "Events API", "version": "1.0.0"}})
+        assert result == {"title": "Events API", "version": "1.0.0"}
 
 
 class TestMappingComplexValues:
@@ -202,3 +229,27 @@ class TestMappingWithDefaults:
         assert result["categories"] == ["REGISTRY"]
         assert result["quay"]["endpoint"] == "quay.example.com"
         assert "internal_id" not in result
+
+
+class TestNormalization:
+    def test_dict_to_list_with_api_id(self):
+        source = ConnectorConfig({
+            "name": "test-source",
+            "target_key": "items",
+            "connection": {
+                "host": "https://example.com",
+                "auth_type": "none",
+                "endpoint": "/api/test",
+            },
+            "mapping": {},
+        })
+        c = GenericCollector.__new__(GenericCollector)
+        c.source = source
+
+        data = {
+            "1forge.com": {"preferred": "0.0.1"},
+            "1password.com:events": {"preferred": "1.0.0"},
+        }
+        result = c._dict_to_list(data)
+        assert result[0]["api_id"] == "1forge.com"
+        assert result[1]["api_id"] == "1password.com:events"

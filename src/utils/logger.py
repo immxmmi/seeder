@@ -11,10 +11,10 @@ class Logger:
     @staticmethod
     def log(level, cls, msg):
         colors = {
-            "DEBUG": "\033[94m",  # Blue
-            "INFO": "\033[92m",   # Green
-            "WARN": "\033[93m",   # Yellow
-            "ERROR": "\033[91m",  # Red
+            "DEBUG": "\033[94m",
+            "INFO": "\033[92m",
+            "WARN": "\033[93m",
+            "ERROR": "\033[91m",
         }
         reset = "\033[0m"
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

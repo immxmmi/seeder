@@ -2,8 +2,7 @@ import os
 from typing import Any, Dict, Optional
 
 import requests
-
-from config.loader import SourceConfig
+from config.loader import ConnectorConfig
 from utils.logger import Logger as log
 
 SENSITIVE_HEADERS = {"authorization", "x-api-key", "cookie", "set-cookie"}
@@ -13,7 +12,7 @@ DEFAULT_TIMEOUT = 30
 class ApiClient:
     """HTTP client for a specific source. Each source gets its own client instance."""
 
-    def __init__(self, source: SourceConfig, verify=True):
+    def __init__(self, source: ConnectorConfig, verify=True):
         self.source = source
         self.timeout = int(os.getenv("API_TIMEOUT", DEFAULT_TIMEOUT))
         self.verify = verify
@@ -24,7 +23,6 @@ class ApiClient:
             "X-Requested-With": "XMLHttpRequest",
         }
 
-        # Resolve token from environment variable
         token = None
         if source.token_env:
             token = os.getenv(source.token_env)
@@ -41,7 +39,7 @@ class ApiClient:
 
         self._session: Optional[requests.Session] = None
 
-        log.debug("ApiClient", f"Initialized for source '{source.name}' -> {self.base_url}")
+        log.debug("ApiClient", f"Initialized for '{source.name}' -> {self.base_url}")
 
     @property
     def session(self) -> requests.Session:
@@ -61,6 +59,8 @@ class ApiClient:
     def get(self, endpoint: str, **kwargs) -> Any:
         url = f"{self.base_url}{endpoint}"
         log.debug("ApiClient", f"GET {url}")
+        log.debug("ApiClient", f"timeout={self.timeout}s verify={self.verify}")
+        log.debug("ApiClient", f"headers={self._mask_sensitive_headers(self.headers)}")
 
         try:
             response = self.session.get(
@@ -85,6 +85,11 @@ class ApiClient:
         except requests.HTTPError:
             log.error("ApiClient", f"HTTP {response.status_code} on GET {url} body={response.text}")
             raise
+
+        log.debug(
+            "ApiClient",
+            f"status={response.status_code} content_type={response.headers.get('Content-Type')} length={len(response.text)}",
+        )
 
         if not response.text or not response.text.strip():
             return {}

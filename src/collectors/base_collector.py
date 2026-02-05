@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 
-from config.loader import SourceConfig
+from config.loader import ConnectorConfig
 
 
 class BaseCollector(ABC):
     """Abstract base class for all data collectors."""
 
-    def __init__(self, source: SourceConfig):
+    def __init__(self, source: ConnectorConfig):
         self.source = source
 
     @abstractmethod

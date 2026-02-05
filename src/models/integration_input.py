@@ -1,14 +1,17 @@
 """Pydantic models for Integration inputs (acs-provisioner format)."""
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
+
 from pydantic import BaseModel
 
 
 class IntegrationInput(BaseModel):
     """A single integration entry in the inputs.yaml format expected by acs-provisioner."""
     name: str
-    type: str
+    type: Literal["quay", "docker"]
     categories: Optional[List[str]] = None
+    quay: Optional[Dict[str, Any]] = None
+    docker: Optional[Dict[str, Any]] = None
 
     class Config:
         extra = "allow"

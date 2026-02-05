@@ -1,36 +1,89 @@
 import os
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterable
 
 import yaml
-
 from utils.logger import Logger as log
 
 
-class SourceConfig:
-    """Configuration for a single data source, loaded from sources/*.yaml."""
+class ConnectorConfig:
+    """Configuration for a single connector."""
 
     def __init__(self, data: dict, source_file: str = ""):
         self.source_file: str = source_file
         self.name: str = data["name"]
         self.enabled: bool = data.get("enabled", True)
-        self.target_key: str = data["target_key"]
+        self.target_key: str = data.get("target_key", "")
 
-        # Connection
         conn = data.get("connection", {})
         self.host: str = conn.get("host", "").rstrip("/")
         self.auth_type: str = conn.get("auth_type", "bearer")
         self.token_env: str = conn.get("token_env", "")
         self.endpoint: str = conn.get("endpoint", "/")
 
-        # Field mapping: API field name -> output field name
-        self.mapping: Dict[str, str] = data.get("mapping", {})
+        raw_mapping = data.get("mapping", {})
+        self.mapping_replace_object: Optional[str] = None
+        self.mapping_fields: List[Dict[str, str]] = self._parse_mapping(raw_mapping)
 
-        # Static default values to add to every item
+        if not self.target_key and self.mapping_replace_object:
+            self.target_key = self.mapping_replace_object
+        elif self.mapping_replace_object and self.target_key != self.mapping_replace_object:
+            log.warn(
+                "Config",
+                f"Connector '{self.name}': target_key '{self.target_key}' "
+                f"differs from mapping.replace_object '{self.mapping_replace_object}'",
+            )
+        if not self.target_key:
+            raise KeyError("target_key is required (or mapping.replace_object must be set)")
+
         self.defaults: Dict[str, Any] = data.get("defaults", {})
+        self._validate()
 
     def __repr__(self):
-        return f"SourceConfig(name={self.name}, host={self.host}, endpoint={self.endpoint})"
+        return f"ConnectorConfig(name={self.name}, host={self.host}, endpoint={self.endpoint})"
+
+    def _validate(self) -> None:
+        if not self.name:
+            raise ValueError("connector.name is required")
+        if not self.host:
+            raise ValueError(f"connector '{self.name}': connection.host is required")
+        if not self.endpoint:
+            raise ValueError(f"connector '{self.name}': connection.endpoint is required")
+
+        auth = (self.auth_type or "").lower()
+        if auth not in {"bearer", "basic", "apikey", "none"}:
+            raise ValueError(f"connector '{self.name}': auth_type must be bearer|basic|apikey|none")
+        if auth in {"bearer", "basic", "apikey"} and not self.token_env:
+            raise ValueError(f"connector '{self.name}': token_env is required for auth_type '{auth}'")
+
+        if self.mapping_fields and not self.mapping_replace_object:
+            raise ValueError(f"connector '{self.name}': mapping.replace_object is required")
+        if self.mapping_replace_object and not self.mapping_fields:
+            raise ValueError(f"connector '{self.name}': mapping.fields must not be empty")
+
+    def _parse_mapping(self, raw_mapping: Any) -> List[Dict[str, str]]:
+        """Normalize mapping to a list of {'from': ..., 'to': ...}."""
+        if not raw_mapping:
+            return []
+
+        if isinstance(raw_mapping, dict) and "fields" in raw_mapping:
+            self.mapping_replace_object = raw_mapping.get("replace_object")
+            fields = raw_mapping.get("fields", [])
+            return self._normalize_mapping_fields(fields)
+
+        return []
+
+    @staticmethod
+    def _normalize_mapping_fields(fields: Iterable[Any]) -> List[Dict[str, str]]:
+        normalized: List[Dict[str, str]] = []
+        for item in fields:
+            if not isinstance(item, dict):
+                continue
+            api_field = item.get("from")
+            out_field = item.get("to")
+            if api_field and out_field:
+                normalized.append({"from": api_field, "to": out_field})
+        return normalized
 
 
 class Config:
@@ -49,7 +102,8 @@ class Config:
             return
         self._initialized = True
 
-        config_file = Path(__file__).parent / "settings.yaml"
+        default_config_dir = Path(__file__).parent
+        config_file = Path(os.getenv("SEEDER_CONFIG_FILE", default_config_dir / "settings.yaml"))
 
         if not config_file.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_file}")
@@ -62,20 +116,18 @@ class Config:
         if not data:
             raise ValueError("Configuration file is empty")
 
-        # Debug
         debug_cfg = data.get("debug", {})
         self.debug = os.getenv("DEBUG_ENABLED", str(debug_cfg.get("enabled", "false"))).lower() == "true"
         log.configure(self.debug)
 
-        # App
         app_cfg = data.get("app", {})
         self.version = os.getenv("APP_VERSION", app_cfg.get("version", "unknown"))
 
-        # Load sources from sources/*.yaml
-        sources_dir = Path(__file__).parent / "sources"
-        self.sources: List[SourceConfig] = self._load_sources(sources_dir)
+        connectors_cfg = data.get("connectors")
+        if connectors_cfg is None:
+            raise ValueError("connectors must be defined in settings.yaml")
+        self.sources: List[ConnectorConfig] = self._load_connectors(connectors_cfg)
 
-        # Output
         output_cfg = data.get("output", {})
         BASE_DIR = Path(__file__).resolve().parent.parent
         self.output_file = Path(
@@ -85,7 +137,6 @@ class Config:
             project_root = BASE_DIR.parent
             self.output_file = (project_root / self.output_file).resolve()
 
-        # TLS
         disable_verify = os.getenv("DISABLE_TLS_VERIFY", "false").lower() == "true"
         ca_bundle = os.getenv("CA_BUNDLE", "")
         if disable_verify:
@@ -97,30 +148,41 @@ class Config:
 
         if self.debug:
             log.debug("Config", f"Version: {self.version}")
-            log.debug("Config", f"Sources: {len(self.sources)}")
+            log.debug("Config", f"Connectors: {len(self.sources)}")
             log.debug("Config", f"Output file: {self.output_file}")
             log.debug("Config", f"TLS verify: {self.verify}")
+            for c in self.sources:
+                log.debug(
+                    "Config",
+                    f"Connector '{c.name}': enabled={c.enabled} target={c.target_key} "
+                    f"host={c.host} endpoint={c.endpoint} auth={c.auth_type}",
+                )
+                log.debug(
+                    "Config",
+                    f"Connector '{c.name}': mapping_fields={len(c.mapping_fields)} "
+                    f"replace_object={c.mapping_replace_object} defaults={list(c.defaults.keys())}",
+                )
 
     @staticmethod
-    def _load_sources(sources_dir: Path) -> List[SourceConfig]:
-        """Load all source definitions from sources/*.yaml."""
-        sources = []
+    @staticmethod
+    def _load_connectors(connectors_cfg: Any) -> List[ConnectorConfig]:
+        """Load connectors from a list in the main settings YAML."""
+        sources: List[ConnectorConfig] = []
 
-        if not sources_dir.exists():
-            log.warn("Config", f"Sources directory not found: {sources_dir}")
+        if not isinstance(connectors_cfg, list):
+            log.error("Config", "connectors must be a list")
             return sources
 
-        for yaml_file in sorted(sources_dir.glob("*.yaml")):
+        for i, raw in enumerate(connectors_cfg, 1):
+            if not isinstance(raw, dict):
+                log.warn("Config", f"Invalid connector at index {i}")
+                continue
             try:
-                raw = yaml.safe_load(yaml_file.read_text())
-                if not raw:
-                    log.warn("Config", f"Empty source file: {yaml_file.name}")
-                    continue
-                source = SourceConfig(raw, source_file=yaml_file.name)
+                source = ConnectorConfig(raw, source_file="settings.yaml")
                 sources.append(source)
-                log.debug("Config", f"Loaded source: {source.name} ({yaml_file.name})")
-            except (yaml.YAMLError, KeyError) as e:
-                log.error("Config", f"Failed to load source {yaml_file.name}: {e}")
+                log.debug("Config", f"Loaded connector: {source.name}")
+            except (KeyError, TypeError) as e:
+                log.error("Config", f"Failed to load connector at index {i}: {e}")
 
         return sources
 

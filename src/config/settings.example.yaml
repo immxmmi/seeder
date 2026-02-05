@@ -1,0 +1,59 @@
+output:
+  file: "../acs-provisioner/src/pipelines/inputs.yaml"
+
+debug:
+  enabled: false
+
+app:
+  version: "1.0.0"
+
+connectors:
+  - name: "acs-notifiers"
+    enabled: true
+    connection:
+      host: "https://cmdb.example.com"
+      auth_type: "bearer"
+      token_env: "CMDB_TOKEN"
+      endpoint: "/api/v1/notifiers"
+
+    mapping:
+      replace_object: "notifiers"
+      fields:
+        - from: "title"
+          to: "name"
+        - from: "notification_type"
+          to: "type"
+        - from: "ui_endpoint"
+          to: "uiEndpoint"
+        - from: "label_key"
+          to: "labelKey"
+        - from: "label_default"
+          to: "labelDefault"
+        - from: "config"
+          to: "jira"
+
+    defaults:
+      traits:
+        mutabilityMode: "ALLOW_MUTATE"
+        visibility: "VISIBLE"
+        origin: "IMPERATIVE"
+
+  - name: "acs-integrations"
+    enabled: true
+    connection:
+      host: "https://cmdb.example.com"
+      auth_type: "bearer"
+      token_env: "CMDB_TOKEN"
+      endpoint: "/api/v1/integrations"
+
+    mapping:
+      replace_object: "integrations"
+      fields:
+        - from: "title"
+          to: "name"
+        - from: "integration_type"
+          to: "type"
+        - from: "category_list"
+          to: "categories"
+        - from: "config"
+          to: "quay"
